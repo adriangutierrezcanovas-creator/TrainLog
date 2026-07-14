@@ -1,4 +1,4 @@
-const CACHE_NAME = "trainlog-v1";
+const CACHE_NAME = "trainlog-v2";
 
 const SHELL_FILES = [
   "./",

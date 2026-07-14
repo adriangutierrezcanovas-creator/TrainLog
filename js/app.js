@@ -2,6 +2,8 @@
 // pintar la pantalla activa con innerHTML. Los overlays (timer, flash) viven en un
 // contenedor aparte para no perder el contenido de debajo mientras están abiertos.
 
+const REST_OPTIONS = [60, 120, 180];
+
 const state = {
   screen: "home", // home | exercise | done
   dayKey: null,
@@ -9,31 +11,45 @@ const state = {
   setIndex: 0,
   weight: 0,
   reps: 0,
+  lastDisplay: null, // último valor histórico (fijo durante toda la visita al ejercicio)
+  sessionSets: {}, // { exId: [reps_serie1, reps_serie2, ...] } de la sesión actual, para el techo acumulado de fallo-pausa
   completedToday: null,
 };
 
 let timerInterval = null;
 
 function currentExId() {
-  return state.dayKey ? DAYS[state.dayKey].exercises[state.exIndex] : null;
+  if (!state.dayKey) return null;
+  return dayExerciseId(DAYS[state.dayKey], state.exIndex);
 }
 function currentEx() {
   const id = currentExId();
   return id ? EX[id] : null;
 }
+function currentTotalSets() {
+  return dayExerciseSets(DAYS[state.dayKey], state.exIndex);
+}
 
 function loadValuesFor(dayKey, idx) {
-  const exId = DAYS[dayKey].exercises[idx];
+  const day = DAYS[dayKey];
+  const exId = dayExerciseId(day, idx);
   const def = EX[exId];
   const last = getLast(exId);
   state.weight = last?.weight ?? def.defaultWeight ?? 0;
   state.reps = last?.reps ?? def.reps ?? 0;
+  state.lastDisplay = last;
 }
 
 function startDay(key) {
+  const day = DAYS[key];
   state.dayKey = key;
   state.exIndex = 0;
   state.setIndex = 0;
+  state.sessionSets = {};
+  day.exercises.forEach((_, i) => {
+    const exId = dayExerciseId(day, i);
+    state.sessionSets[exId] = new Array(dayExerciseSets(day, i)).fill(null);
+  });
   loadValuesFor(key, 0);
   state.screen = "exercise";
   render();
@@ -52,7 +68,7 @@ function goBack() {
     const prevIdx = state.exIndex - 1;
     loadValuesFor(state.dayKey, prevIdx);
     state.exIndex = prevIdx;
-    state.setIndex = EX[DAYS[state.dayKey].exercises[prevIdx]].sets - 1;
+    state.setIndex = dayExerciseSets(DAYS[state.dayKey], prevIdx) - 1;
   } else {
     goBackHome();
     return;
@@ -68,6 +84,65 @@ function jumpToExercise(idx) {
   render();
 }
 
+// Suma los reps de las 3 series del ejercicio en fallo-pausa dentro de la sesión
+// actual (las ya confirmadas + la que se está editando ahora mismo), para comparar
+// contra el techo acumulado (25-28) en vez del techo por serie de un ejercicio normal.
+function restPauseCumulativeReps(exId) {
+  const arr = state.sessionSets[exId] || [];
+  let total = 0;
+  for (let i = 0; i < arr.length; i++) {
+    total += i === state.setIndex ? state.reps : arr[i] ?? 0;
+  }
+  return total;
+}
+
+function computeAtCeiling(ex, exId) {
+  if (ex.bodyweight) return false;
+  if (ex.restpause) return restPauseCumulativeReps(exId) >= ex.clusterCeilingMin;
+  return ex.repCeiling ? state.reps >= ex.repCeiling : false;
+}
+
+function roundToIncrement(value, currentWeight) {
+  const inc = currentWeight % 1 !== 0 ? 0.5 : 1;
+  return Math.round(value / inc) * inc;
+}
+
+function overloadSuggestionText(ex, weight) {
+  if (ex.bodyweight || !ex.capMin) return null;
+  const lo = roundToIncrement(weight * (1 + ex.capMin / 100), weight);
+  const hi = roundToIncrement(weight * (1 + ex.capMax / 100), weight);
+  const caveat = ex.conditional ? ", solo si la semana pasada cumpliste el RIR" : "";
+  return `Techo alcanzado · sube a ${formatNum(lo)}–${formatNum(hi)} kg (+${ex.capMin}–${ex.capMax}%${caveat})`;
+}
+
+// Botón de descanso (60/120/180s) más cercano al descanso de referencia del
+// ejercicio; en empate gana la duración mayor (recuperación completa > justa).
+function recommendedRestIndex(restSeconds) {
+  let best = 0;
+  let bestDiff = Infinity;
+  REST_OPTIONS.forEach((opt, i) => {
+    const diff = Math.abs(opt - restSeconds);
+    if (diff < bestDiff || (diff === bestDiff && opt > REST_OPTIONS[best])) {
+      bestDiff = diff;
+      best = i;
+    }
+  });
+  return best;
+}
+
+function exerciseDescriptorText(ex) {
+  const rir = `RIR ${ex.rir}`;
+  if (ex.restpause) return `${rir} · Fallo-pausa`;
+  if (ex.hint) return `${rir} · ${ex.hint}`;
+  return `${rir} · objetivo ~${ex.reps} reps`;
+}
+
+function lastDisplayText(ex) {
+  if (!state.lastDisplay) return null;
+  if (ex.bodyweight) return `Última vez: ${formatNum(state.lastDisplay.reps)} reps`;
+  return `Última vez: ${formatNum(state.lastDisplay.weight)} kg × ${formatNum(state.lastDisplay.reps)}`;
+}
+
 function confirmSet() {
   const ex = currentEx();
   const exId = currentExId();
@@ -78,6 +153,7 @@ function confirmSet() {
   } else {
     setLast(exId, { reps: state.reps });
   }
+  state.sessionSets[exId][state.setIndex] = state.reps;
   appendHistory({
     date: todayStr(),
     day: day.label,
@@ -87,7 +163,7 @@ function confirmSet() {
     reps: state.reps,
   });
 
-  const totalSets = ex.sets;
+  const totalSets = currentTotalSets();
   const totalExercises = day.exercises.length;
   const isLastSet = state.setIndex + 1 >= totalSets;
   const isLastExercise = state.exIndex + 1 >= totalExercises;
@@ -99,7 +175,8 @@ function confirmSet() {
     });
   } else if (!isLastExercise) {
     const nextIdx = state.exIndex + 1;
-    showFlash(`Siguiente: ${EX[day.exercises[nextIdx]].name}`, () => {
+    const nextId = dayExerciseId(day, nextIdx);
+    showFlash(`Siguiente: ${EX[nextId].name}`, () => {
       loadValuesFor(state.dayKey, nextIdx);
       state.exIndex = nextIdx;
       state.setIndex = 0;
@@ -172,7 +249,7 @@ function renderHomeHTML() {
       <div class="home-header">
         <div class="home-brand">
           ${icon("dumbbell", { size: 22, color: "#111", strokeWidth: 2.5 })}
-          <span>TrainLog</span>
+          <span>Training Log</span>
         </div>
         <button class="icon-btn" id="btn-export" aria-label="Exportar registro">
           ${icon("download", { size: 16, color: "#111", strokeWidth: 2.5 })}
@@ -211,17 +288,17 @@ function bindDone() {
 
 function renderExerciseHTML() {
   const ex = currentEx();
+  const exId = currentExId();
   const day = DAYS[state.dayKey];
-  const totalSets = ex.sets;
+  const totalSets = currentTotalSets();
   const totalExercises = day.exercises.length;
-  const ceiling = !ex.bodyweight ? CEILING[ex.kind] : null;
-  const atCeiling = ceiling ? state.reps >= ceiling : false;
+  const atCeiling = computeAtCeiling(ex, exId);
   const isLastSetOfExercise = state.setIndex + 1 >= totalSets;
   const isLastExerciseOfDay = state.exIndex + 1 >= totalExercises;
   const isMovingToNextExercise = isLastSetOfExercise && !isLastExerciseOfDay;
 
   const navButtons = day.exercises
-    .map((id, i) => {
+    .map((_, i) => {
       const bg = i === state.exIndex ? "#111" : i < state.exIndex ? "rgba(0,0,0,0.35)" : "rgba(0,0,0,0.1)";
       const color = i === state.exIndex ? "var(--lime)" : "#111";
       return `<button class="ex-nav__btn" style="background:${bg};color:${color}" data-idx="${i}">${i + 1}</button>`;
@@ -253,9 +330,18 @@ function renderExerciseHTML() {
     </div>`
     : "";
 
+  const recoIdx = recommendedRestIndex(ex.restSeconds);
   const timerButtons = [1, 2, 3]
-    .map((m) => `<button class="timer-btn" data-min="${m}">${icon("timer", { size: 18, color: "var(--lime)" })}${m}'</button>`)
+    .map((m, i) => {
+      const reco = i === recoIdx;
+      return `<button class="timer-btn${reco ? " timer-btn--reco" : ""}" data-min="${m}">${
+        reco ? '<span class="timer-star">&#9733;</span>' : ""
+      }${icon("timer", { size: 18, color: "var(--lime)" })}${m}'</button>`;
+    })
     .join("");
+
+  const lastText = lastDisplayText(ex);
+  const ceilingText = atCeiling ? overloadSuggestionText(ex, state.weight) : null;
 
   return `
     <div class="screen screen--tight">
@@ -272,7 +358,8 @@ function renderExerciseHTML() {
 
       <div class="flex-1">
         <h1 class="ex-title">${ex.name}</h1>
-        <p class="ex-hint">${ex.hint ? ex.hint : `objetivo ~${ex.reps} reps`}</p>
+        ${lastText ? `<p class="ex-last">${lastText}</p>` : ""}
+        <p class="ex-hint">${exerciseDescriptorText(ex)}</p>
 
         ${weightField}
 
@@ -283,7 +370,7 @@ function renderExerciseHTML() {
             <div class="stepper__value${atCeiling ? " stepper__value--warn" : ""}">${formatNum(state.reps)}</div>
             <button class="stepper__btn" data-delta="1">${icon("plus", { size: 26, color: "var(--lime)", strokeWidth: 3 })}</button>
           </div>
-          ${atCeiling ? '<p class="ceiling-warning">Techo alcanzado · sube peso la próxima vez</p>' : ""}
+          ${ceilingText ? `<p class="ceiling-warning">${ceilingText}</p>` : ""}
         </div>
       </div>
 

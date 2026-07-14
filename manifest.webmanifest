@@ -1,6 +1,6 @@
 {
-  "name": "TrainLog",
-  "short_name": "TrainLog",
+  "name": "Training Log",
+  "short_name": "Training Log",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
