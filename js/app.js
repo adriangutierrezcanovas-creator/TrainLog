@@ -30,13 +30,18 @@ function currentTotalSets() {
   return dayExerciseSets(DAYS[state.dayKey], state.exIndex);
 }
 
-function loadValuesFor(dayKey, idx) {
+// setIdx se pasa explícito (no se lee de state.setIndex) porque en todos los
+// puntos de llamada el índice de serie "destino" todavía no se ha escrito en
+// state cuando se decide el prefill -- necesario desde que dominadas tiene un
+// objetivo de reps distinto por serie (repsTarget).
+function loadValuesFor(dayKey, idx, setIdx) {
   const day = DAYS[dayKey];
   const exId = dayExerciseId(day, idx);
   const def = EX[exId];
   const last = getLast(exId);
+  const targetReps = def.repsTarget ? def.repsTarget[setIdx] : def.reps;
   state.weight = last?.weight ?? def.defaultWeight ?? 0;
-  state.reps = last?.reps ?? def.reps ?? 0;
+  state.reps = last?.reps ?? targetReps ?? 0;
   state.lastDisplay = last;
 }
 
@@ -50,7 +55,7 @@ function startDay(key) {
     const exId = dayExerciseId(day, i);
     state.sessionSets[exId] = new Array(dayExerciseSets(day, i)).fill(null);
   });
-  loadValuesFor(key, 0);
+  loadValuesFor(key, 0, 0);
   state.screen = "exercise";
   render();
 }
@@ -66,9 +71,10 @@ function goBack() {
     state.setIndex -= 1;
   } else if (state.exIndex > 0) {
     const prevIdx = state.exIndex - 1;
-    loadValuesFor(state.dayKey, prevIdx);
+    const lastSetIdx = dayExerciseSets(DAYS[state.dayKey], prevIdx) - 1;
+    loadValuesFor(state.dayKey, prevIdx, lastSetIdx);
     state.exIndex = prevIdx;
-    state.setIndex = dayExerciseSets(DAYS[state.dayKey], prevIdx) - 1;
+    state.setIndex = lastSetIdx;
   } else {
     goBackHome();
     return;
@@ -78,7 +84,7 @@ function goBack() {
 
 function jumpToExercise(idx) {
   if (idx === state.exIndex) return;
-  loadValuesFor(state.dayKey, idx);
+  loadValuesFor(state.dayKey, idx, 0);
   state.exIndex = idx;
   state.setIndex = 0;
   render();
@@ -130,17 +136,16 @@ function recommendedRestIndex(restSeconds) {
   return best;
 }
 
-function exerciseDescriptorText(ex) {
-  const rir = `RIR ${ex.rir}`;
-  if (ex.restpause) return `${rir} · Fallo-pausa`;
-  if (ex.hint) return `${rir} · ${ex.hint}`;
-  return `${rir} · objetivo ~${ex.reps} reps`;
+function targetBoxText(ex) {
+  if (ex.restpause) return "Fallo-pausa";
+  if (ex.repsTarget) return `${ex.repsTarget[state.setIndex]} reps`;
+  return `~${ex.reps} reps`;
 }
 
 function lastDisplayText(ex) {
   if (!state.lastDisplay) return null;
-  if (ex.bodyweight) return `Última vez: ${formatNum(state.lastDisplay.reps)} reps`;
-  return `Última vez: ${formatNum(state.lastDisplay.weight)} kg × ${formatNum(state.lastDisplay.reps)}`;
+  if (ex.bodyweight) return `${formatNum(state.lastDisplay.reps)} reps`;
+  return `${formatNum(state.lastDisplay.weight)} kg × ${formatNum(state.lastDisplay.reps)}`;
 }
 
 function confirmSet() {
@@ -177,7 +182,7 @@ function confirmSet() {
     const nextIdx = state.exIndex + 1;
     const nextId = dayExerciseId(day, nextIdx);
     showFlash(`Siguiente: ${EX[nextId].name}`, () => {
-      loadValuesFor(state.dayKey, nextIdx);
+      loadValuesFor(state.dayKey, nextIdx, 0);
       state.exIndex = nextIdx;
       state.setIndex = 0;
       render();
@@ -343,6 +348,17 @@ function renderExerciseHTML() {
   const lastText = lastDisplayText(ex);
   const ceilingText = atCeiling ? overloadSuggestionText(ex, state.weight) : null;
 
+  const infoBoxes = [
+    lastText
+      ? `<div class="ex-info-box">${icon("history", { size: 22, color: "#111", strokeWidth: 2.5 })}<span class="ex-info-box__value">${lastText}</span></div>`
+      : null,
+    `<div class="ex-info-box">${icon("gauge", { size: 22, color: "#111", strokeWidth: 2.5 })}<span class="ex-info-box__value">RIR ${ex.rir}</span></div>`,
+    `<div class="ex-info-box">${icon("target", { size: 22, color: "#111", strokeWidth: 2.5 })}<span class="ex-info-box__value">${targetBoxText(ex)}</span></div>`,
+  ]
+    .filter(Boolean)
+    .join("");
+  const infoRowClass = lastText ? "ex-info-row" : "ex-info-row ex-info-row--two";
+
   return `
     <div class="screen screen--tight">
       <div class="ex-topbar">
@@ -358,8 +374,10 @@ function renderExerciseHTML() {
 
       <div class="flex-1">
         <h1 class="ex-title">${ex.name}</h1>
-        ${lastText ? `<p class="ex-last">${lastText}</p>` : ""}
-        <p class="ex-hint">${exerciseDescriptorText(ex)}</p>
+        ${ex.hint ? `<p class="ex-hint">${ex.hint}</p>` : ""}
+
+        <div class="${infoRowClass}">${infoBoxes}</div>
+        ${ex.progressionNote ? `<p class="ex-progression">${ex.progressionNote}</p>` : ""}
 
         ${weightField}
 

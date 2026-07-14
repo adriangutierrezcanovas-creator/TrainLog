@@ -14,6 +14,9 @@ const ICON_PATHS = {
     '<line x1="10" y1="2" x2="14" y2="2"/><line x1="12" y1="14" x2="15" y2="11"/><circle cx="12" cy="14" r="8"/>',
   dumbbell:
     '<path d="M6.5 6.5 17.5 17.5"/><path d="M4.6 4.6a2 2 0 1 1 2.8 2.8L4.6 10.2a2 2 0 1 1-2.8-2.8z"/><path d="M19.4 19.4a2 2 0 1 1-2.8-2.8l2.8-2.8a2 2 0 1 1 2.8 2.8z"/><path d="M2.8 9.2 4.6 11" /><path d="M9.2 2.8 11 4.6"/><path d="M13 19.4l1.8 1.8"/><path d="M19.4 13l1.8 1.8"/>',
+  history: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+  gauge: '<path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/>',
+  target: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
 };
 
 function icon(name, opts) {

@@ -23,10 +23,11 @@ const EX = {
     name: "Dominadas",
     bodyweight: true,
     sets: 4,
-    reps: 4,
+    repsTarget: [8, 6, 4, 4], // objetivo por serie, ya no uniforme (ver ACTUALIZACION_JULIO_2026_v2.md #1)
+    progressionNote: "+1 rep cada ~2 semanas, prioriza series 3 y 4",
     hint: "peso corporal · técnica estricta",
     rir: "1-2",
-    restSeconds: 150,
+    restSeconds: 180, // subido desde 150 -- a probar, caída grande de reps entre serie 1 y 2
   },
   rdl: {
     name: "Peso muerto rumano",
@@ -91,7 +92,7 @@ const EX = {
     reps: 10,
     defaultWeight: 17,
     kind: "compound",
-    repCeiling: 16,
+    repCeiling: 13, // bajado desde 16 (genérico de compuestos): unilateral cerca del fallo, prioriza técnica/rodilla sobre reps
     capMin: 7,
     capMax: 10,
     conditional: true,
@@ -151,13 +152,13 @@ const EX = {
     name: "Elevaciones laterales",
     sets: 3,
     reps: 12,
-    defaultWeight: 10,
+    defaultWeight: 6, // deload desde 10 (solo default; no sobrescribe last:laterales ya guardado)
     kind: "isolation",
     capMin: 10,
     capMax: 15,
     restpause: true,
-    clusterCeilingMin: 25,
-    clusterCeilingMax: 28,
+    clusterCeilingMin: 22, // antes 25/28 genérico -- estimación de partida, a ajustar con datos reales
+    clusterCeilingMax: 24,
     rir: "0-1",
     restSeconds: 105,
   },
@@ -170,8 +171,8 @@ const EX = {
     capMin: 10,
     capMax: 15,
     restpause: true,
-    clusterCeilingMin: 25,
-    clusterCeilingMax: 28,
+    clusterCeilingMin: 20, // antes 25/28 genérico -- estimación de partida, a ajustar con datos reales
+    clusterCeilingMax: 22,
     rir: "0-1",
     restSeconds: 135,
   },
@@ -184,8 +185,8 @@ const EX = {
     capMin: 10,
     capMax: 15,
     restpause: true,
-    clusterCeilingMin: 25,
-    clusterCeilingMax: 28,
+    clusterCeilingMin: 22, // antes 25/28 genérico -- estimación de partida, a ajustar con datos reales
+    clusterCeilingMax: 24,
     rir: "0-1",
     restSeconds: 105,
   },
