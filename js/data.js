@@ -92,7 +92,7 @@ const EX = {
     reps: 10,
     defaultWeight: 17,
     kind: "compound",
-    repCeiling: 13, // bajado desde 16 (genérico de compuestos): unilateral cerca del fallo, prioriza técnica/rodilla sobre reps
+    repCeiling: 16, // vuelve a alinearse con el genérico de compuestos (bajó a 13 en la revisión anterior, pero 13 reps con 17kg mostró margen de sobra para subir carga)
     capMin: 7,
     capMax: 10,
     conditional: true,
@@ -178,7 +178,7 @@ const EX = {
   },
   extension_triceps: {
     name: "Extensión tríceps",
-    sets: 3,
+    sets: 2, // bajado desde 3 (jueves jul-2026): el tríceps ya recibe volumen indirecto suficiente de los presses
     reps: 12,
     defaultWeight: 17,
     kind: "isolation",
@@ -209,7 +209,8 @@ const DAYS = {
   4: {
     label: "Jueves",
     tag: "Pierna + hombro + brazos",
-    exercises: ["bulgara", "zancadas", "extension_triceps", "laterales", "curl_inclinado"],
+    // laterales al final (jul-2026): igual que en lunes, no gastar el hombro antes del trabajo principal
+    exercises: ["bulgara", "zancadas", "extension_triceps", "curl_inclinado", "laterales"],
   },
   5: {
     label: "Viernes",
