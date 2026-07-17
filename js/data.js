@@ -138,7 +138,7 @@ const EX = {
   },
   squeeze_press: {
     name: "Squeeze Press",
-    sets: 3,
+    sets: 2, // bajado desde 3 (viernes)
     reps: 15,
     defaultWeight: 27,
     kind: "isolation",
